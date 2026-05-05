@@ -335,9 +335,9 @@
             showStatus(`Scanning for ${targetMAC}...`, 'info');
 
             try {
-                // Request device with acceptAllAdvertisements to see all nearby devices
+                // Request device with acceptAllDevices to see all nearby devices
                 const device = await navigator.bluetooth.requestDevice({
-                    acceptAllAdvertisements: true
+                    acceptAllDevices: true
                 });
 
                 console.log('Device selected:', device.name);

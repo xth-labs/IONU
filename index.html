@@ -335,46 +335,43 @@
             showStatus(`Scanning for ${targetMAC}...`, 'info');
 
             try {
+                // Request device with acceptAllAdvertisements to see all nearby devices
                 const device = await navigator.bluetooth.requestDevice({
-                    acceptAllAdvertisements: true,
-                    optionalServices: []
+                    acceptAllAdvertisements: true
                 });
 
-                const gattServer = await device.gatt.connect();
-                console.log('Connected to device');
-
-                // Even though we connected, continue scanning
-                startBackgroundScan();
+                console.log('Device selected:', device.name);
+                
+                // Start listening for advertisements
+                startListeningForAdvertisements();
+                
             } catch (error) {
                 if (error.name === 'NotFoundError') {
                     showStatus('No device selected', 'error');
                 } else if (error.name === 'NotSupportedError') {
                     showStatus('Web Bluetooth not supported on this browser', 'error');
+                } else if (error.name === 'SecurityError') {
+                    showStatus('HTTPS required for Web Bluetooth', 'error');
                 } else {
-                    console.log('Device selection cancelled or error:', error);
+                    console.log('Error:', error.message);
                 }
                 stopScanning();
             }
         }
 
-        async function startBackgroundScan() {
-            // Simulate continuous scanning
-            const scanInterval = setInterval(() => {
+        function startListeningForAdvertisements() {
+            // Simulate scanning by checking discovered devices
+            const scanLoop = setInterval(() => {
                 if (!scanning) {
-                    clearInterval(scanInterval);
+                    clearInterval(scanLoop);
                     return;
                 }
-
-                // In production, this would use native Android Bluetooth APIs
-                // For now, we'll simulate device detection for demo purposes
-                simulateBluetoothScan();
-            }, 2000);
+                updateUI();
+            }, 1000);
         }
 
         function simulateBluetoothScan() {
-            // This is a placeholder. In a real scenario with Web Bluetooth,
-            // you'd use the GATT server or other APIs to scan for devices.
-            // For true background scanning on Android, you need a native app.
+            // Placeholder for future device detection
         }
 
         function stopScanning() {

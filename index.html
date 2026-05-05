@@ -149,6 +149,11 @@
         .device-target {
             background: #E8F5E9;
             border-left: 4px solid #4CAF50;
+            animation: pulse-bg 0.5s;
+        }
+        @keyframes pulse-bg {
+            0% { background: #FFE082; }
+            100% { background: #E8F5E9; }
         }
         .scanning-indicator {
             display: inline-block;
@@ -194,6 +199,13 @@
             color: #666;
             margin-top: 4px;
         }
+        .alert-flash {
+            animation: flash 0.3s ease-in-out;
+        }
+        @keyframes flash {
+            0%, 100% { background: white; }
+            50% { background: #FFE082; }
+        }
     </style>
 </head>
 <body>
@@ -202,7 +214,7 @@
         <p class="subtitle">Scan for Bluetooth Low Energy devices</p>
 
         <div class="info-box">
-            💡 Enter a MAC prefix (e.g., AA:BB:xx:xx or AA:BB:CC:xx) to track and receive alerts when detected.
+            💡 Detects Axon law enforcement equipment by default (OUI: 00:25:DF). Or enter a custom MAC prefix to track (e.g., AA:BB:xx:xx).
         </div>
 
         <div class="section">
@@ -211,8 +223,9 @@
                 <input 
                     type="text" 
                     id="macInput" 
-                    placeholder="AA:BB:xx:xx" 
+                    placeholder="00:25:xx:xx" 
                     autocomplete="off"
+                    value="00:25:xx:xx"
                 />
                 <button class="primary" onclick="startScanning()">Start</button>
                 <button class="danger" onclick="stopScanning()" style="display: none;" id="stopBtn">Stop</button>
@@ -244,7 +257,15 @@
         </div>
 
         <div class="section" style="border-top: 1px solid #eee; padding-top: 16px; margin-top: 16px;">
-            <button onclick="clearDevices()" style="width: 100%; background: #f5f5f5;">Clear history</button>
+            <div class="section-title">Detection Log</div>
+            <div id="detectionLog" style="background: #f9f9f9; border: 1px solid #eee; border-radius: 6px; padding: 12px; font-size: 12px; font-family: monospace; max-height: 200px; overflow-y: auto; color: #666;">
+                <p style="color: #999;">No detections logged yet</p>
+            </div>
+            <button onclick="clearLogs()" style="width: 100%; margin-top: 12px; background: #f5f5f5;">Clear log</button>
+        </div>
+
+        <div class="section" style="border-top: 1px solid #eee; padding-top: 16px; margin-top: 16px;">
+            <button onclick="clearDevices()" style="width: 100%; background: #f5f5f5;">Clear device list</button>
         </div>
     </div>
 
@@ -253,6 +274,7 @@
         let targetMAC = null;
         let detectedDevices = new Map();
         let targetDetections = 0;
+        let lastDetectionTime = 0;
 
         function formatMAC(mac) {
             return mac.toUpperCase();
@@ -262,11 +284,21 @@
             return mac.replace(/:/g, '').toUpperCase();
         }
 
+        function logDetection(macAddress) {
+            const now = new Date().toLocaleString();
+            const logEntry = `[${now}] DETECTION: ${formatMAC(macAddress)}`;
+            console.log(logEntry);
+            
+            let logs = JSON.parse(localStorage.getItem('axonLogs') || '[]');
+            logs.push({timestamp: now, mac: formatMAC(macAddress)});
+            if (logs.length > 100) logs = logs.slice(-100);
+            localStorage.setItem('axonLogs', JSON.stringify(logs));
+        }
+
         function macMatchesPrefix(fullMAC, prefix) {
             const normalized = normalizeMAC(fullMAC);
             const prefixNormalized = normalizeMAC(prefix).replace(/X/g, '?');
             
-            // Convert xx wildcards to regex pattern
             const pattern = prefixNormalized
                 .split('')
                 .map(char => char === '?' ? '[0-9A-F]' : char)
@@ -287,6 +319,42 @@
             }
         }
 
+        function playAlertSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const now = audioContext.currentTime;
+                
+                // First beep - 800Hz
+                const osc1 = audioContext.createOscillator();
+                const gain1 = audioContext.createGain();
+                osc1.connect(gain1);
+                gain1.connect(audioContext.destination);
+                osc1.frequency.value = 800;
+                osc1.type = 'sine';
+                gain1.gain.setValueAtTime(0.3, now);
+                gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc1.start(now);
+                osc1.stop(now + 0.15);
+
+                // Second beep - 1000Hz
+                setTimeout(() => {
+                    const osc2 = audioContext.createOscillator();
+                    const gain2 = audioContext.createGain();
+                    osc2.connect(gain2);
+                    gain2.connect(audioContext.destination);
+                    osc2.frequency.value = 1000;
+                    osc2.type = 'sine';
+                    const now2 = audioContext.currentTime;
+                    gain2.gain.setValueAtTime(0.3, now2);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, now2 + 0.15);
+                    osc2.start(now2);
+                    osc2.stop(now2 + 0.15);
+                }, 200);
+            } catch (e) {
+                console.log('Audio error:', e);
+            }
+        }
+
         function updateUI() {
             document.getElementById('devicesFound').textContent = detectedDevices.size;
             document.getElementById('detections').textContent = targetDetections;
@@ -297,6 +365,15 @@
 
             sortedDevices.forEach(device => {
                 const isTarget = targetMAC && macMatchesPrefix(device.mac, targetMAC);
+                
+                // Play alert and log if target detected and not recently alerted
+                if (isTarget && (Date.now() - lastDetectionTime) > 1000) {
+                    playAlertSound();
+                    logDetection(device.mac);
+                    lastDetectionTime = Date.now();
+                    targetDetections++;
+                }
+                
                 html += `
                     <div class="device-card ${isTarget ? 'device-target' : ''}">
                         <div class="device-name">${device.name || '(Unknown)'}</div>
@@ -317,7 +394,6 @@
                 return;
             }
 
-            // Validate format: AA:BB:xx:xx or variations
             if (!/^([0-9A-Fa-f]{2}|xx):([0-9A-Fa-f]{2}|xx)((:([0-9A-Fa-f]{2}|xx)){0,4})?$/i.test(macInput)) {
                 showStatus('Invalid format. Use AA:BB:xx:xx or AA:BB:CC:xx', 'error');
                 return;
@@ -326,6 +402,7 @@
             targetMAC = macInput.toUpperCase();
             scanning = true;
             targetDetections = 0;
+            detectedDevices.clear();
 
             document.getElementById('stopBtn').style.display = 'inline-block';
             document.getElementById('scanningStatus').style.display = 'inline';
@@ -335,43 +412,47 @@
             showStatus(`Scanning for ${targetMAC}...`, 'info');
 
             try {
-                // Request device with acceptAllDevices to see all nearby devices
-                const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true
-                });
+                if (!navigator.bluetooth) {
+                    showStatus('Web Bluetooth not supported on this browser', 'error');
+                    stopScanning();
+                    return;
+                }
 
+                const options = {
+                    acceptAllDevices: true,
+                    optionalServices: ['generic_access']
+                };
+
+                const device = await navigator.bluetooth.requestDevice(options);
                 console.log('Device selected:', device.name);
-                
-                // Start listening for advertisements
-                startListeningForAdvertisements();
-                
+
+                if (device) {
+                    startContinuousScanning();
+                }
+
             } catch (error) {
+                console.error('Bluetooth error:', error);
                 if (error.name === 'NotFoundError') {
                     showStatus('No device selected', 'error');
                 } else if (error.name === 'NotSupportedError') {
-                    showStatus('Web Bluetooth not supported on this browser', 'error');
+                    showStatus('Web Bluetooth not supported', 'error');
                 } else if (error.name === 'SecurityError') {
                     showStatus('HTTPS required for Web Bluetooth', 'error');
                 } else {
-                    console.log('Error:', error.message);
+                    showStatus('Error: ' + error.message, 'error');
                 }
                 stopScanning();
             }
         }
 
-        function startListeningForAdvertisements() {
-            // Simulate scanning by checking discovered devices
-            const scanLoop = setInterval(() => {
+        function startContinuousScanning() {
+            const scanInterval = setInterval(() => {
                 if (!scanning) {
-                    clearInterval(scanLoop);
+                    clearInterval(scanInterval);
                     return;
                 }
                 updateUI();
-            }, 1000);
-        }
-
-        function simulateBluetoothScan() {
-            // Placeholder for future device detection
+            }, 500);
         }
 
         function stopScanning() {
@@ -389,12 +470,26 @@
             updateUI();
         }
 
-        // Listen for Bluetooth device advertisements (some browsers support this)
-        if (navigator.bluetooth && navigator.bluetooth.requestDevice) {
-            // Web Bluetooth is available
+        function displayLogs() {
+            const logs = JSON.parse(localStorage.getItem('axonLogs') || '[]');
+            const logDiv = document.getElementById('detectionLog');
+            
+            if (logs.length === 0) {
+                logDiv.innerHTML = '<p style="color: #999;">No detections logged yet</p>';
+                return;
+            }
+            
+            logDiv.innerHTML = logs.map(log => `<div>${log.timestamp} | ${log.mac}</div>`).join('');
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLogs() {
+            localStorage.removeItem('axonLogs');
+            displayLogs();
         }
 
         updateUI();
+        displayLogs();
     </script>
 </body>
 </html>

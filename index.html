@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLE Scanner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            padding: 16px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 24px;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .section {
+            margin-bottom: 24px;
+        }
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .input-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: monospace;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #007AFF;
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+        }
+        button {
+            padding: 10px 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            color: #333;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #f5f5f5;
+            border-color: #999;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button.primary {
+            background: #007AFF;
+            color: white;
+            border-color: #007AFF;
+        }
+        button.primary:hover {
+            background: #0051D5;
+            border-color: #0051D5;
+        }
+        button.danger {
+            background: #FF3B30;
+            color: white;
+            border-color: #FF3B30;
+        }
+        button.danger:hover {
+            background: #CC2D25;
+            border-color: #CC2D25;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 12px;
+            display: none;
+        }
+        .status.info {
+            background: #E3F2FD;
+            color: #1565C0;
+            border-left: 4px solid #1565C0;
+        }
+        .status.success {
+            background: #E8F5E9;
+            color: #2E7D32;
+            border-left: 4px solid #2E7D32;
+        }
+        .status.error {
+            background: #FFEBEE;
+            color: #C62828;
+            border-left: 4px solid #C62828;
+        }
+        .status.show {
+            display: block;
+        }
+        .device-list {
+            margin-top: 16px;
+        }
+        .device-card {
+            background: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .device-name {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .device-mac {
+            font-family: monospace;
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+        .device-rssi {
+            color: #999;
+            font-size: 12px;
+        }
+        .device-target {
+            background: #E8F5E9;
+            border-left: 4px solid #4CAF50;
+        }
+        .scanning-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #FF9800;
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+        .info-box {
+            background: #F0F8FF;
+            border-left: 4px solid #2196F3;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #1565C0;
+            margin-bottom: 16px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .stat-box {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📡 BLE Scanner</h1>
+        <p class="subtitle">Scan for Bluetooth Low Energy devices</p>
+
+        <div class="info-box">
+            💡 Enter a MAC prefix (e.g., AA:BB:xx:xx or AA:BB:CC:xx) to track and receive alerts when detected.
+        </div>
+
+        <div class="section">
+            <div class="section-title">Target Device</div>
+            <div class="input-group">
+                <input 
+                    type="text" 
+                    id="macInput" 
+                    placeholder="AA:BB:xx:xx" 
+                    autocomplete="off"
+                />
+                <button class="primary" onclick="startScanning()">Start</button>
+                <button class="danger" onclick="stopScanning()" style="display: none;" id="stopBtn">Stop</button>
+            </div>
+            <div id="statusMsg" class="status"></div>
+        </div>
+
+        <div class="section">
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="devicesFound">0</div>
+                    <div class="stat-label">Devices found</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="detections">0</div>
+                    <div class="stat-label">Target detections</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">
+                <span id="scanningStatus" style="display: none;">
+                    <span class="scanning-indicator"></span>Scanning...
+                </span>
+                <span id="idleStatus">Ready to scan</span>
+            </div>
+            <div id="deviceList" class="device-list"></div>
+        </div>
+
+        <div class="section" style="border-top: 1px solid #eee; padding-top: 16px; margin-top: 16px;">
+            <button onclick="clearDevices()" style="width: 100%; background: #f5f5f5;">Clear history</button>
+        </div>
+    </div>
+
+    <script>
+        let scanning = false;
+        let targetMAC = null;
+        let detectedDevices = new Map();
+        let targetDetections = 0;
+
+        function formatMAC(mac) {
+            return mac.toUpperCase();
+        }
+
+        function normalizeMAC(mac) {
+            return mac.replace(/:/g, '').toUpperCase();
+        }
+
+        function macMatchesPrefix(fullMAC, prefix) {
+            const normalized = normalizeMAC(fullMAC);
+            const prefixNormalized = normalizeMAC(prefix).replace(/X/g, '?');
+            
+            // Convert xx wildcards to regex pattern
+            const pattern = prefixNormalized
+                .split('')
+                .map(char => char === '?' ? '[0-9A-F]' : char)
+                .join('');
+            
+            const regex = new RegExp(`^${pattern}`);
+            return regex.test(normalized);
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('statusMsg');
+            status.textContent = message;
+            status.className = 'status ' + type + ' show';
+            if (type === 'success') {
+                setTimeout(() => {
+                    status.classList.remove('show');
+                }, 4000);
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('devicesFound').textContent = detectedDevices.size;
+            document.getElementById('detections').textContent = targetDetections;
+
+            let html = '';
+            const sortedDevices = Array.from(detectedDevices.values())
+                .sort((a, b) => b.rssi - a.rssi);
+
+            sortedDevices.forEach(device => {
+                const isTarget = targetMAC && macMatchesPrefix(device.mac, targetMAC);
+                html += `
+                    <div class="device-card ${isTarget ? 'device-target' : ''}">
+                        <div class="device-name">${device.name || '(Unknown)'}</div>
+                        <div class="device-mac">${formatMAC(device.mac)}</div>
+                        <div class="device-rssi">Signal: ${device.rssi} dBm</div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('deviceList').innerHTML = html || '<p style="color: #999; font-size: 13px;">No devices discovered yet</p>';
+        }
+
+        async function startScanning() {
+            const macInput = document.getElementById('macInput').value.trim();
+            
+            if (!macInput) {
+                showStatus('Please enter a MAC prefix', 'error');
+                return;
+            }
+
+            // Validate format: AA:BB:xx:xx or variations
+            if (!/^([0-9A-Fa-f]{2}|xx):([0-9A-Fa-f]{2}|xx)((:([0-9A-Fa-f]{2}|xx)){0,4})?$/i.test(macInput)) {
+                showStatus('Invalid format. Use AA:BB:xx:xx or AA:BB:CC:xx', 'error');
+                return;
+            }
+
+            targetMAC = macInput.toUpperCase();
+            scanning = true;
+            targetDetections = 0;
+
+            document.getElementById('stopBtn').style.display = 'inline-block';
+            document.getElementById('scanningStatus').style.display = 'inline';
+            document.getElementById('idleStatus').style.display = 'none';
+            document.querySelector('input[type="text"]').disabled = true;
+
+            showStatus(`Scanning for ${targetMAC}...`, 'info');
+
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllAdvertisements: true,
+                    optionalServices: []
+                });
+
+                const gattServer = await device.gatt.connect();
+                console.log('Connected to device');
+
+                // Even though we connected, continue scanning
+                startBackgroundScan();
+            } catch (error) {
+                if (error.name === 'NotFoundError') {
+                    showStatus('No device selected', 'error');
+                } else if (error.name === 'NotSupportedError') {
+                    showStatus('Web Bluetooth not supported on this browser', 'error');
+                } else {
+                    console.log('Device selection cancelled or error:', error);
+                }
+                stopScanning();
+            }
+        }
+
+        async function startBackgroundScan() {
+            // Simulate continuous scanning
+            const scanInterval = setInterval(() => {
+                if (!scanning) {
+                    clearInterval(scanInterval);
+                    return;
+                }
+
+                // In production, this would use native Android Bluetooth APIs
+                // For now, we'll simulate device detection for demo purposes
+                simulateBluetoothScan();
+            }, 2000);
+        }
+
+        function simulateBluetoothScan() {
+            // This is a placeholder. In a real scenario with Web Bluetooth,
+            // you'd use the GATT server or other APIs to scan for devices.
+            // For true background scanning on Android, you need a native app.
+        }
+
+        function stopScanning() {
+            scanning = false;
+            document.getElementById('stopBtn').style.display = 'none';
+            document.getElementById('scanningStatus').style.display = 'none';
+            document.getElementById('idleStatus').style.display = 'inline';
+            document.querySelector('input[type="text"]').disabled = false;
+            showStatus('Scan stopped', 'info');
+        }
+
+        function clearDevices() {
+            detectedDevices.clear();
+            targetDetections = 0;
+            updateUI();
+        }
+
+        // Listen for Bluetooth device advertisements (some browsers support this)
+        if (navigator.bluetooth && navigator.bluetooth.requestDevice) {
+            // Web Bluetooth is available
+        }
+
+        updateUI();
+    </script>
+</body>
+</html>
